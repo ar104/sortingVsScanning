@@ -1,0 +1,143 @@
+An excellent post by Frank McSherry recently looked at pre-processing costs -
+particularly that of pre-sorting the edges of the input graph, a format expected
+by most graph processing systems. I think its a timely post (pun unintended :)
+and draws attention to something we want people to focus on - namely that most
+graph processing systems do not pay attention to preprocessing costs.
+
+I am going to divide this somewhat long document into three parts:
+
+1. Should you care ?
+
+Lets start with the basic question. Should you care about pre-processing costs ?
+The answer is that it depends. Where is your data coming from ? If your data
+exists, for example, in a relational database chances are your data is already
+sorted or indexed. On the other hand what if your data comes from observing
+edges in the Twitter network - observations stemming from Tweets that refer to
+each other ? The Naiad paper in SOSP 2013 [2] talks about such an example -
+however if you are observing interactions among people and objects (like photos)
+in a social network you could easily end up with billions of edges that you
+would archive as soon as you observe them. This is not dissimilar to how
+intrusion detection happens and of course how the infamous PRISM program might
+work :) [3]
+
+So here is the the scenario: you have a few trillion unsorted edges sitting
+around on some cheap magnetic disks you bought. You're a network scientist and
+would like to know the following things:
+
+a. What does the breadth first ordering of vertices look like - kernel for other
+useful operators, precisely why it was chosen for the Graph500 benchmark.
+
+b. What is the distance distribution between vertices, i.e. how many pairs of
+vertices are a distance 'd' apart.
+
+c. What is the centrality of each vertex ?
+
+If your problem does not look like this then you probably shouldn't be looking
+at X-Stream at all. Using a fast in memory system like Galois [7] (that Frank did
+not compare against for in-memory graph processing :) might be the way to go.
+
+People not so familiar with graph algorithms might say I'm crazy for even
+suggesting such problems can be solved on terascale graphs, particularly from
+secondary storage - unless of course you are one of these guys [4]. People
+somewhat more familiar with graph algorithms will simply smile and point to a
+bunch of interesting work on semi-streaming graph algorithms that have in fact
+been designed to solve exactly these problems: two that I am particularly fond
+of are HyperANF[2] for b and HyperBall [3] for c. Both of these do sequential
+scans over the edges of the graph to arrive at the result - trading sorting and
+pre-processing costs for approximate answers.
+
+When we set out to build X-Stream and subsequent systems our aim was to really
+provide a great system and computation model for implementing such
+algorithms. The fundamental *systems* takeaway from the paper was that doing
+sequential scanning is a great way to deal with graphs because the gap between
+sequential and random access bandwidth means that you still win over sorting the
+data and then doing random access to fetch edges attached to active vertices.
+
+
+2. Going Terascale
+
+The X-Stream paper pretty much pushed the bar up in terms of graph size. The
+largest graph we tackled was 64 billion edges on a single machine. But thats not
+terascale ! To scale the ability of X-Stream a further 16X we went distributed !
+X-Stream's successor is a system called Chaos due to be presented in SOSP
+2015. I am not going to talk much about it here - mostly because we want you to
+attend the conferenec and read the paper instead :) 
+
+To me being able to scale to a trillion edges was not really the point. The
+point was that we were able to scale the same basic idea of streaming over
+sorting 1000X over two iterations of the conference (better than Moore's Law
+:). Of course Chaos includes in addition a bunch of interesting ideas to do with
+order-oblviousness and randomization but its lineage is X-Stream and its
+furthers the same objectives.
+
+To buy Frank's argument against the X-Stream world view therefore I would have
+to see him sort a trillion keys on this laptop (aka the terasort
+benchmark). Unfortunately that is not possible therefore I will try to reason
+this out otherwise.
+
+3. So, is Frank wrong ?
+
+Frank in fact has illustrated that something which we all learn in Algorithms
+101 and tend to forget as systems researchers: the scale of your data matters when
+discussing algorithms, particularly sorting algorithms. The
+single graph in Frank's blog post is a good example. Observe how the green line
+is completely flat. This suggests that the cost of sorting data is constant per
+sorted key (in this case the edge is the key). So does that mean sorting is a
+linear problem ? No of course not (#fail in algorithms otherwise). Sorting is
+only linear in that graph because Frank is keeping the number of *possible keys*
+(vertices) constant, while increasing the number of actual keys (edges). This is
+pretty much the best case for radix sort - where the cost is O(log N) passes
+over data, where N is number of *possible keys*. That graph would look very
+different if the number of vertices in the graph were also doubled along with the
+edges. It would look even more different if the scale extended to something that
+- unfortunately - Frank's laptop is not capable of.
+
+As an aside, X-Stream and its successor Chaos use distribution sort to partition
+data - which is extremely similar to the radix sort that Frank espouses but we
+careful to not end up with as many keys as vertices. In fact, we address this
+exact same point in the Figure 26 of the X-Stream paper. The complexity for
+sorting assumes O (log(V)) passes and illustrates how X-Stream does better for
+small diameter (not small) graphs. Frank's blog post is a lot like contradicting
+that quicksort has a better big-oh complexity than insertion sort by running
+small datasets, a classic error. 
+
+Frank therefore was right, but his observations are only limited to the scale of
+data he is looking at, in this case whatever fits on his laptop. While being a
+"weird and complicated system" (Frank's words not mine :) and probably
+lacking the poshness (my words :) of Naid/Derivatives, X-Stream and its successor
+Chaos have been built for the singlular purpose of letting its users process
+really large graphs. 
+
+
+4. Is there anything I can take away from this ?
+
+Unfortunately this is not the only example in Frank's excellent series of blog
+posts. Another good example of a similar error is assuming that your vertices
+fit in RAM. This semi-external memory model in fact is an entirely separate area and
+active area of research in graph processing, I would refer readers to Roger
+Pearce's work in that area[6]. I've noticed a claim in a paper by Frank along the
+lines of "I can use Hilbert curves to lay out my data". Hilbert curves have been
+tried to arrange sparse matrices in distributed systems many years
+ago. Unfortunately they are known to not work well across many data sets and
+algorithms precisely because they are a heuristic to solve the minimum linear
+arrangment problem, known to be an NP-hard optimization problem [5]. This is
+probably why Frank only evaluated Pagerank on Twitter to illustrate the utility
+of Hilbert curves. This (and the COST paper in general) is an unfortunate
+example of doing "single data point science".
+
+The takeaway for readers would be to take bombastic claims (such as those
+involving a certain laptop :) with a pinch of salt. Systems research is not
+about "my system is better than your weird and complicated system". Its about
+ideas and opinions and I approach systems conferences more as a marketplace for
+ideas rather than duelling grounds. I've written enough high performance
+software to know how to get to bare metal performance on small data sets if that
+was the research problem to tackle. For X-Stream and Chaos, it was not.
+
+
+[1] https://github.com/frankmcsherry/blog/blob/master/posts/2015-08-15.md
+[2] http://dl.acm.org/citation.cfm?id=2522738
+[3] https://en.wikipedia.org/wiki/PRISM_(surveillance_program)
+[4] http://dl.acm.org/citation.cfm?id=2522740
+[5] http://tracer.lcc.uma.es/problems/minla/minla.htm
+[6] https://parasol.tamu.edu/~rap2317/
+[7] http://dl.acm.org/citation.cfm?id=2522739

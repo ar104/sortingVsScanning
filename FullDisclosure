@@ -1,0 +1,132 @@
+Radix Sort, Full Disclosure !!
+-----------------------------------------
+
+One of Frank Mc Sherry's recent comments on radix sort intrigued me - he says
+[1]  " Four passes, no random access. This is great. I don't even see a log n
+there, do you?"
+
+Unfortunately, this is a gross misrepresentation of how radix sort works and what
+happens with larger data sets. Lets recap - Given N keys consisting of W words
+radix sort takes N*W time. However W is really log (max key), the maximum value
+of a key in your dataset. So no, radix sort does not make sorting linear.
+
+To illustrate this I wrote a version of radix sort myself[2] - that uses a radix
+size of 256 (i.e. considers things a byte at a time). It always sorts 1 << 29
+keys (the magic number :) but takes input to specify the maximum size of a key.
+
+The sort is smart enough to avoid unnecessary passes. For example, when the
+maximum key is 256 only one pass is necessary. No need for fours passes.
+
+Oh look - there's my laptop. Lets run this [3] and see what happens.
+
+Radix sort. Radix = 256
+-----------------------
+MAX_KEY=1 PASSES=1 TIME=2.911273
+MAX_KEY=2 PASSES=1 TIME=2.487333
+MAX_KEY=4 PASSES=1 TIME=2.477107
+MAX_KEY=8 PASSES=1 TIME=2.484192
+MAX_KEY=16 PASSES=1 TIME=3.384148
+MAX_KEY=32 PASSES=1 TIME=4.934090
+MAX_KEY=64 PASSES=1 TIME=8.704034
+MAX_KEY=128 PASSES=1 TIME=11.005385
+MAX_KEY=256 PASSES=1 TIME=12.203561
+MAX_KEY=512 PASSES=2 TIME=13.966627
+MAX_KEY=1024 PASSES=2 TIME=13.945937
+MAX_KEY=2048 PASSES=2 TIME=13.905570
+MAX_KEY=4096 PASSES=2 TIME=14.816640
+MAX_KEY=8192 PASSES=2 TIME=16.632129
+MAX_KEY=16384 PASSES=2 TIME=14.076714
+MAX_KEY=32768 PASSES=2 TIME=14.662348
+MAX_KEY=65536 PASSES=2 TIME=16.847193
+MAX_KEY=131072 PASSES=3 TIME=18.497639
+MAX_KEY=262144 PASSES=3 TIME=18.614291
+MAX_KEY=524288 PASSES=3 TIME=18.514094
+MAX_KEY=1048576 PASSES=3 TIME=18.589927
+MAX_KEY=2097152 PASSES=3 TIME=18.784908
+MAX_KEY=4194304 PASSES=3 TIME=18.762320
+MAX_KEY=8388608 PASSES=3 TIME=18.883423
+MAX_KEY=16777216 PASSES=3 TIME=22.764631
+MAX_KEY=33554432 PASSES=4 TIME=24.643506
+MAX_KEY=67108864 PASSES=4 TIME=24.657417
+MAX_KEY=134217728 PASSES=4 TIME=24.420656
+MAX_KEY=268435456 PASSES=4 TIME=24.505708
+MAX_KEY=536870912 PASSES=4 TIME=24.387798
+
+
+See something interesting there ? We're always sorting 1 << 29 keys but the time
+increases. Thats because the number of passes we need also increases as we
+increase the maximum key. This effect is missing in Frank Mc Sherry's graph -
+the flat line is simply a result of him considering a very narrow range of
+vertices.
+
+
+A casual approach to Radix Sort might consider simply reducing the number of
+passes over the data by increasing the radix from 256 to 65536. In Frank Mc
+Sherry's terms use two bytes instead of one. Does that work ? Lets find out. The
+laptop grinds away again ....
+
+
+MAX_KEY=1 PASSES=1 TIME=2.860177
+MAX_KEY=2 PASSES=1 TIME=2.270282
+MAX_KEY=4 PASSES=1 TIME=2.192549
+MAX_KEY=8 PASSES=1 TIME=2.254536
+MAX_KEY=16 PASSES=1 TIME=3.076270
+MAX_KEY=32 PASSES=1 TIME=4.698177
+MAX_KEY=64 PASSES=1 TIME=8.487225
+MAX_KEY=128 PASSES=1 TIME=10.710588
+MAX_KEY=256 PASSES=1 TIME=11.813827
+MAX_KEY=512 PASSES=1 TIME=15.798172
+MAX_KEY=1024 PASSES=1 TIME=23.368975
+MAX_KEY=2048 PASSES=1 TIME=19.819727
+MAX_KEY=4096 PASSES=1 TIME=20.337769
+MAX_KEY=8192 PASSES=1 TIME=21.434581
+MAX_KEY=16384 PASSES=1 TIME=16.012173
+MAX_KEY=32768 PASSES=1 TIME=23.105796
+MAX_KEY=65536 PASSES=1 TIME=28.566083
+MAX_KEY=131072 PASSES=2 TIME=30.173377
+MAX_KEY=262144 PASSES=2 TIME=30.037720
+MAX_KEY=524288 PASSES=2 TIME=29.259276
+MAX_KEY=1048576 PASSES=2 TIME=29.851140
+MAX_KEY=2097152 PASSES=2 TIME=29.936572
+MAX_KEY=4194304 PASSES=2 TIME=30.140076
+MAX_KEY=8388608 PASSES=2 TIME=30.271154
+MAX_KEY=16777216 PASSES=2 TIME=33.385415
+MAX_KEY=33554432 PASSES=2 TIME=36.659053
+MAX_KEY=67108864 PASSES=2 TIME=39.211884
+MAX_KEY=134217728 PASSES=2 TIME=39.004128
+MAX_KEY=268435456 PASSES=2 TIME=39.442239
+MAX_KEY=536870912 PASSES=2 TIME=40.424481
+
+
+What the ??!!!! The time actually increased instead of going down. The passes
+dropped to 2 from 4... so what's happening ?
+
+The reason is that radix sort is not simply running from main memory. Rather it is
+running in a memory hierarchy that includes the CPU cache and main memory. The
+CPU cache has a limited number of lines. When you do the inner counting sort
+pass of radix sort with radix R you are really writing simultaneously to R
+lines. If R is smaller than the number of cachelines you're good, every line is
+used fully. If not you kick out a line before you fill it up fully - a situation
+very akin to disk thrashing in paging systems. 
+
+
+The in-memory engine for X-Stream includes a optimized radix sort implementaiton
+that we use for partitioning edges and updates (in x_splitter.hpp). Its fairly
+sophisticated - multithreading with almost no synchronization. What is more
+interesting however is X-Stream takes as input the CPU cache size as a command
+line parameter. The autotuner in X-Stream - among other things - uses this
+information to calculate the number of cache lines and appropriately tune the
+radix sort implementation in X-Stream. Yes, its "weird and complex" [1] :) but
+we thought through a lot of these issues when we built X-Stream.
+
+Takeway
+-------------
+Sorting is an interesting and complex problem. Don't jump to conclusions by
+reading racy blog posts. If you want to know how your memory hierarchy might
+influence your sort algorithm read - for example - reference [51] from the
+X-Stream paper !
+
+
+[1] https://github.com/frankmcsherry/blog/blob/master/posts/2015-08-15.md
+[2] https://github.com/ar104/sortingVsScanning/blob/master/radix_sort.c
+[3] https://github.com/ar104/sortingVsScanning/blob/master/run_test.sh

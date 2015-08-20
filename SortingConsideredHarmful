@@ -78,19 +78,21 @@ this out otherwise.
 3. So, is Frank wrong ?
 
 Frank in fact has illustrated that something which we all learn in Algorithms
-101 and tend to forget as systems researchers: the scale of your data matters when
-discussing algorithms, particularly sorting algorithms. The
-single graph in Frank's blog post is a good example. Observe how the green line
-is completely flat. This suggests that the cost of sorting data is constant per
-sorted key (in this case the edge is the key). So does that mean sorting is a
-linear problem ? No of course not (#fail in algorithms otherwise). Sorting is
-only linear in that graph because Frank is keeping the number of *possible keys*
-(vertices) constant, while increasing the number of actual keys (edges). This is
-pretty much the best case for radix sort - where the cost is O(log N) passes
-over data, where N is number of *possible keys*. That graph would look very
-different if the number of vertices in the graph were also doubled along with the
-edges. It would look even more different if the scale extended to something that
-- unfortunately - Frank's laptop is not capable of.
+101 and tend to forget as systems researchers: the scale of your data matters
+when discussing algorithms, particularly sorting algorithms. The single graph in
+Frank's blog post is a good example. Observe how the green line is completely
+flat. This suggests that the cost of sorting data is constant per sorted key (in
+this case the edge is the key). So does that mean sorting is a linear problem ?
+No of course not (#fail in algorithms otherwise). Sorting is only linear in that
+graph because Frank is keeping the number of *possible keys* (vertices) almost
+constant, while increasing the number of actual keys (edges). This is pretty
+much the best case for radix sort - where the cost is O(log N) passes over data,
+where N is number of *possible keys*. That graph would look very different if
+the number of vertices in the graph were also doubled along with the edges. It
+would look even more different if the scale extended to something that -
+unfortunately - Frank's laptop is not capable of.
+
+For a more complete demonstration of the idea see the follow-up post here [8].
 
 As an aside, X-Stream and its successor Chaos use distribution sort to partition
 data - which is extremely similar to the radix sort that Frank espouses but we
@@ -141,3 +143,4 @@ was the research problem to tackle. For X-Stream and Chaos, it was not.
 [5] http://tracer.lcc.uma.es/problems/minla/minla.htm
 [6] https://parasol.tamu.edu/~rap2317/
 [7] http://dl.acm.org/citation.cfm?id=2522739
+[8] https://github.com/ar104/sortingVsScanning/blob/master/FullDisclosure
